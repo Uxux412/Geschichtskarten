@@ -402,19 +402,6 @@ svg.seamless .f{stroke-width:calc(.6px*var(--k,1))}
 .group-title{font:700 clamp(15px,1.2vw,18px)/1 var(--ui-font);letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin:0;
   display:flex;align-items:center;gap:12px}
 .group-title::after{content:"";flex:1;height:1px;background:var(--rule)}
-.lock{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
-  padding:20px;text-align:center;background:color-mix(in srgb,var(--panel) 88%,transparent);z-index:3;margin:0}
-.lock svg{width:34px;height:34px;color:var(--ink)}
-.lock b{font:700 clamp(19px,2vw,24px)/1.15 var(--ui-font)}
-.lock p{font:400 15px/1.45 var(--text-font);margin:0;max-width:40ch;color:var(--muted)}
-.lock label{font:600 13px/1 var(--ui-font);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-top:6px}
-.lock .row{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
-.lock input{font:600 18px/1 var(--ui-font);letter-spacing:.08em;padding:10px 12px;border:1px solid var(--rule);border-radius:6px;
-  background:var(--panel);color:var(--ink);width:min(60vw,220px)}
-.lock button{appearance:none;border:0;background:var(--accent);color:var(--accent-ink);font:700 16px/1 var(--ui-font);
-  padding:11px 16px;border-radius:6px;cursor:pointer}
-.lock .err{color:var(--front);font-style:italic}
-@media (max-width:620px){.lock svg{display:none}.lock p:not(.err){font-size:14px}.lock{gap:6px;padding:12px}}
 
 </style>
 
@@ -615,13 +602,7 @@ const DATA = {"mods":[{"id":"m5","title":"Frankreich unter Ludwig XIV.","long":"
     el('rect', Object.assign({style:'fill:var(--sea)'}, big), t);
     if(M.bg) el('rect', Object.assign({style:'fill:' + fillOf(M.bg.replace(/^c-/, ''), pre)}, big), t);
     if(M.image) el('image', {href:M.image, x:M.vb[0], y:M.vb[1], width:M.vb[2], height:M.vb[3]}, t);
-    else if(M.locked){
-      t.setAttribute('viewBox', '0 0 120 90'); t.setAttribute('preserveAspectRatio', 'xMidYMid meet');
-      el('rect', {width:120, height:90, style:'fill:var(--sea)'}, t);
-      el('path', {d:'M51 42v-6a9 9 0 0 1 18 0v6', style:'fill:none;stroke:var(--ink);stroke-width:3;opacity:.7'}, t);
-      el('rect', {x:47, y:42, width:26, height:20, rx:3, style:'fill:var(--ink);opacity:.7'}, t);
-      return t;
-    }
+
     if(M.land) el('path', {d:M.land, class:'land'}, t);
     const landClip = M.clips.land ? 'url(#' + pre + 'land)' : null;
     const gF = el('g', {'clip-path':landClip}, t);
@@ -716,46 +697,8 @@ const DATA = {"mods":[{"id":"m5","title":"Frankreich unter Ludwig XIV.","long":"
     if(M.lakes){ const lk = el('path', {d:M.lakes, class:'lakes'}); gOver.insertBefore(lk, gLines); }
     if(M.coast) { const c = el('path', {d:M.coast, class:'coast'}); gOver.insertBefore(c, gLines); }
     cur = {M, nodes};
-    lockUI(M);
     buildUI(M);
     layout();
-  }
-
-  // Passwortgeschützte Fotokarte (nur für die eigene Klasse)
-  const b64bytes = b => Uint8Array.from(atob(b), c => c.charCodeAt(0));
-  async function unlock(M, pw){
-    try{
-      const L = M.locked, enc = new TextEncoder();
-      const base = await crypto.subtle.importKey('raw', enc.encode(pw.trim().toUpperCase()), 'PBKDF2', false, ['deriveKey']);
-      const key = await crypto.subtle.deriveKey({name:'PBKDF2', salt:b64bytes(L.salt), iterations:L.iter, hash:'SHA-256'},
-        base, {name:'AES-GCM', length:256}, false, ['decrypt']);
-      const plain = await crypto.subtle.decrypt({name:'AES-GCM', iv:b64bytes(L.iv)}, key, b64bytes(L.data));
-      M.image = URL.createObjectURL(new Blob([plain], {type:L.type}));
-      try{ localStorage.setItem('gk-pw', pw.trim()); }catch(e){}
-      return true;
-    }catch(e){ return false; }
-  }
-  function lockUI(M){
-    let box = $('lock');
-    const need = M.locked && !M.image;
-    if(!need){ if(box) box.hidden = true; return; }
-    if(!box){
-      box = document.createElement('form'); box.id = 'lock'; box.className = 'lock';
-      box.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 11V8a5 5 0 0 1 10 0v3" fill="none" stroke="currentColor" stroke-width="2"/><rect x="5" y="11" width="14" height="10" rx="2" fill="currentColor"/></svg>' +
-        '<b>Nur für unsere Klasse</b><p>Diese Karte ist ein Foto einer Schulwandkarte. Gib das Passwort ein, das du im Unterricht bekommen hast.</p>' +
-        '<label for="pw">Passwort</label><div class="row"><input id="pw" autocomplete="off" autocapitalize="characters" spellcheck="false">' +
-        '<button type="submit">Öffnen</button></div><p class="err" id="pwerr" hidden>Das Passwort stimmt nicht. Versuch es noch einmal.</p>';
-      $('mapwrap').appendChild(box);
-      box.addEventListener('submit', async e => {
-        e.preventDefault();
-        const btn = box.querySelector('button'); btn.disabled = true; btn.textContent = 'Prüfe …';
-        const ok = await unlock(cur.M, $('pw').value);
-        btn.disabled = false; btn.textContent = 'Öffnen';
-        if(ok){ home(); const s = state.s; render(state.m); show(s, true); }
-        else { $('pwerr').hidden = false; $('pw').select(); }
-      });
-    }
-    box.hidden = false; $('pwerr').hidden = true;
   }
 
   function layout(){
@@ -778,7 +721,7 @@ const DATA = {"mods":[{"id":"m5","title":"Frankreich unter Ludwig XIV.","long":"
       n.e.setAttribute('transform', 'translate(' + d.x + ',' + d.y + ') scale(' + kl + ')' + rot);
     }
     // Maßstab
-    $('scale').hidden = !!(M.image || M.locked);
+    $('scale').hidden = !!M.image;
     const nice = [0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000];
     let km = nice[0];
     for(const c of nice){ if(c * s <= 130) km = c; }
@@ -824,7 +767,7 @@ const DATA = {"mods":[{"id":"m5","title":"Frankreich unter Ludwig XIV.","long":"
       });
     } else ph.hidden = true;
     $('t-camps').hidden = !M.camps;
-    $('t-labels').hidden = !!(M.image || M.locked);
+    $('t-labels').hidden = !!M.image;
     $('kicker').textContent = M.long;
     $('brand-sub').textContent = M.group || '';
     svg.classList.toggle('nolabels', !state.labels);
@@ -1014,7 +957,6 @@ const DATA = {"mods":[{"id":"m5","title":"Frankreich unter Ludwig XIV.","long":"
     const M = cur.M; if(M.campView) flyTo((state.camps ? M.campView : (M.stops[state.s].view || M.vb)).slice()); });
   document.addEventListener('keydown', e => {
     if(e.target && (e.target.tagName === 'INPUT' && e.target.type !== 'range')) return;
-    if(e.target && e.target.closest && e.target.closest('#lock')) return;
     if(!$('qr').hidden){ if(e.key === 'Escape') $('qr').hidden = true; return; }
     if(!viewerOn()) return;
     if(e.key === 'Escape'){ goHome(); return; }
@@ -1110,13 +1052,6 @@ const DATA = {"mods":[{"id":"m5","title":"Frankreich unter Ludwig XIV.","long":"
   tabs();
   home();
   route();
-  (async () => {
-    let pw = null; try{ pw = localStorage.getItem('gk-pw'); }catch(e){}
-    if(!pw) return;
-    let any = false;
-    for(const M of DATA.mods) if(M.locked && !M.image && await unlock(M, pw)) any = true;
-    if(any){ home(); if(cur && cur.M.image && viewerOn()){ const s = state.s; render(state.m); show(s, true); } }
-  })();
   // Offline-Nutzung, wenn die App auf einem eigenen Webserver liegt (z. B. GitHub Pages)
   if('serviceWorker' in navigator && /^https?:$/.test(location.protocol) && !APP_URL.includes('claude.ai')){
     try{ navigator.serviceWorker.register('sw.js').catch(() => {}); }catch(e){}
